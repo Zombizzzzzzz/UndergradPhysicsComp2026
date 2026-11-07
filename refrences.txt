@@ -1,0 +1,6 @@
+IFAB, Laws of the Game: The Ball.
+T. Asai et al., “Fundamental aerodynamics of the soccer ball,” Sports Engineering, 10, 101–110 (2007), doi:10.1007/BF02844207.
+J. E. Goff and M. J. Carré, “Trajectory analysis of a soccer ball,” American Journal of Physics, 77, 1020–1027 (2009), doi:10.1119/1.3197187.
+T. Kray, J. Franke, and W. Frank, “Magnus effect on a rotating soccer ball at high Reynolds numbers,” Journal of Wind Engineering and Industrial Aerodynamics, 124, 46–53 (2014), doi:10.1016/j.jweia.2013.10.010.
+NASA Glenn Research Center, Atmospheric Properties.
+
