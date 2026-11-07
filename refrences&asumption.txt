@@ -1,0 +1,65 @@
+IFAB, Laws of the Game: The Ball.(https://www.theifab.com/laws/latest/the-ball/)
+T. Asai et al., “Fundamental aerodynamics of the soccer ball,” Sports Engineering, 10, 101–110 (2007), doi:10.1007/BF02844207.
+J. E. Goff and M. J. Carré, “Trajectory analysis of a soccer ball,” American Journal of Physics, 77, 1020–1027 (2009), doi:10.1119/1.3197187.
+T. Kray, J. Franke, and W. Frank, “Magnus effect on a rotating soccer ball at high Reynolds numbers,” Journal of Wind Engineering and Industrial Aerodynamics, 124, 46–53 (2014), doi:10.1016/j.jweia.2013.10.010.
+NASA Glenn Research Center, Atmospheric Properties. (https://www.grc.nasa.gov/www/k-12/airplane/airprop.html)
+
+##Assumptions common to all models
+
+Initial Conditions & Kick Tracking:
+ - Initial position (t = 0.00s): (0, 0, 0.11) m (treated as exact).
+ - Observed positions provided at t = 0.05s and t = 0.10s (treated as exact).
+ - Launch velocity is estimated by fitting the kinematic model to these two positions.
+
+Ball & Environment Properties:
+   Point mass approximation for translational motion.
+   Mass (m): 0.43 kg
+   Radius (r): 0.11 m
+   Gravity (g): 9.81 m/s^2 (constant, pointing downward).
+
+Goal-Plane Prediction & Constraints:
+   Target goal plane: x = 11.0 m (evaluates position of the ball's center at crossing).
+   Ignores ground collisions, post/crossbar impacts, and physical ball size upon crossing.
+
+Monte Carlo Noise & Uncertainty Analysis:
+   Initial position stays fixed at (0, 0, 0.11) m.
+   Independent zero-mean Gaussian noise (std dev = 5 mm / 0.005 m) is added to each coordinate of the t = 0.05s and t = 0.10s observations.
+   - Noise level is assumed for tracking uncertainty propagation only; does not account for external physical variations or real-world accuracy.
+
+
+##Main variable-aerodynamics model: drag only
+
+The ball moves through stationary air; wind and indoor air currents are neglected.
+
+Air density is approximated using the selected Kathmandu-altitude model and changes with ball height according to that model.
+
+Drag force opposes the ball’s air-relative velocity, and its magnitude is proportional to speed squared.
+
+The drag coefficient varies with speed according to the empirical relation implemented in the model.
+
+No Magnus force is included in this version.
+
+
+##Variable-Aerodynamics Model (Drag + Magnus Force):
+   
+ Combines the variable drag coefficient C_D(v) and atmospheric density assumptions from the drag-only model with Magnus force.
+  
+ Magnus lift force is computed using an empirical lift-coefficient relation.
+   
+ Prescribed spin vector: (5, 10, 32) rad/s (assumed constant in both magnitude and direction throughout flight).
+  
+ Spin is an assumed parameter, not measured or fitted from the observed position tracking data.
+   
+ Neglects spin decay, aerodynamic wobble, seam/panel asymmetries, and dynamic atmospheric changes.
+
+
+##Constant-Coefficient Quadratic-Drag Baseline:
+   - Drag acceleration: a_D = -q * |v| * v (drag force acts opposite to velocity, magnitude proportional to speed squared).
+   - Coefficient (q): Assumed constant throughout flight; fitted along with initial launch velocity to the two observed positions (t = 0.05s and t = 0.10s).
+   - Exclusions: Does not include a speed-dependent drag coefficient C_D(v), altitude-dependent air density, or Magnus force.
+   - Limitation: Fitted coefficient and resulting trajectory predictions are strictly conditional on this simplified drag model.
+
+##Linear-Drag Baseline:
+   - Drag acceleration: a_D = -k * v (drag force acts opposite to velocity, magnitude proportional to speed, linear velocity dependence).
+   - Coefficient (k): Assumed constant throughout flight; fitted along with initial launch velocity to the two observed positions (t = 0.05s and t = 0.10s).
+   - Exclusions: Simplified comparison model; excludes Magnus force, speed-dependent drag coefficient C_D(v), and altitude-dependent air density.
