@@ -1,0 +1,126 @@
+Here is the clean, fully integrated, and executable script combining your physics model, trajectory solver, least-squares trajectory/fitting engine, and the 500-iteration Monte Carlo noise propagation loop with proper mock initialization for r1, r2, and omega_nominal.
+
+import numpy as np
+from scipy.integrate import solve_ivp
+from scipy.optimize import least_squares
+
+# --- PHYSICAL CONSTANTS AND AERODYNAMIC MODEL ---
+m = 0.43
+r = 0.11
+A = np.pi * r**2
+g = 9.81
+altitude = 1400.0  # Kathmandu Valley
+r0 = np.array([0.0, 0.0, 0.11])
+
+def get_Cd(v_mag):
+    v_crit = 18.0
+    return 0.42 - (0.42 - 0.20) / (1.0 + np.exp(-0.5 * (v_mag - v_crit)))
+
+def get_Cl(v_mag, omega_mag):
+    if v_mag < 0.1 or omega_mag < 0.1:
+        return 0.0
+    return 0.18 * np.tanh(2.0 * (omega_mag * r) / v_mag)
+
+def ode_system(t, state, spin_vector, drag_scale):
+    x, y, z, vx, vy, vz = state
+    velocity = np.array([vx, vy, vz])
+    v_mag = np.linalg.norm(velocity)
+    omega_mag = np.linalg.norm(spin_vector)
+    
+    rho = 1.225 * np.exp(-max(0.0, altitude + z) / 8450.0)
+    
+    a_drag = -drag_scale * (rho * A * get_Cd(v_mag) / (2.0 * m)) * v_mag * velocity
+    
+    if omega_mag > 0.0 and v_mag > 0.1:
+        cl = get_Cl(v_mag, omega_mag)
+        a_magnus = (rho * A * r * cl * omega_mag * v_mag / (2.0 * m)) * np.cross(
+            spin_vector / omega_mag, velocity / v_mag
+        )
+    else:
+        a_magnus = np.zeros(3)
+        
+    acceleration = a_drag + a_magnus + np.array([0.0, 0.0, -g])
+    return [vx, vy, vz, *acceleration]
+
+
+# --- SOLVERS AND FITTING ENGINE ---
+
+def integrate_to_observations(v0, spin_vector, drag_scale, observation_times):
+    sol = solve_ivp(
+        lambda t, state: ode_system(t, state, spin_vector, drag_scale),
+        (0.0, observation_times[-1]), np.concatenate((r0, v0)),
+        t_eval=observation_times, max_step=0.002, rtol=1e-8, atol=1e-10,
+    )
+    return sol.y[:3, :].T
+
+def fit_launch_velocity(r1_observed, r2_observed, spin_vector, drag_scale, dt, sigma_position):
+    observed = np.vstack((r1_observed, r2_observed))
+    observation_times = np.array([dt, 2 * dt])
+    initial_guess = (4 * r1_observed - r2_observed - 3 * r0) / (2 * dt)
+
+    def residual(v0):
+        trajectory = integrate_to_observations(v0, spin_vector, drag_scale, observation_times)
+        return ((trajectory - observed) / sigma_position).ravel()
+
+    fit = least_squares(residual, initial_guess, x_scale="jac", max_nfev=100)
+    return fit.x
+
+def integrate_to_goal(v0, spin_vector, drag_scale):
+    def goal_event(t, state):
+        return state[0] - 11.0
+    goal_event.terminal = True
+    goal_event.direction = 1
+    
+    sol = solve_ivp(
+        lambda t, state: ode_system(t, state, spin_vector, drag_scale),
+        (0.0, 1.0), np.concatenate((r0, v0)), events=goal_event,
+        max_step=0.002, rtol=1e-8, atol=1e-10,
+    )
+    if len(sol.t_events[0]) == 0:
+        return None
+    return sol.t_events[0][0], sol.y_events[0][0]
+
+
+if __name__ == "__main__":
+    # --- SETUP NOMINAL VALUES FOR SIMULATION RUN ---
+    dt = 0.05
+    omega_nominal = np.array([0.0, 0.0, 120.0])
+    v0_true = np.array([18.0, 0.5, 12.0])
+    
+    # Generate synthetic observation points r1 and r2 for testing
+    obs_times = np.array([dt, 2 * dt])
+    true_obs = integrate_to_observations(v0_true, omega_nominal, 1.0, obs_times)
+    r1, r2 = true_obs[0], true_obs[1]
+
+    # --- MEASUREMENT-NOISE MONTE CARLO PROPAGATION ---
+    rng = np.random.default_rng(42)
+    trial_t, trial_y, trial_z = [], [], []
+
+    for _ in range(500):
+        # Perturb observation points with Gaussian noise
+        r1_noisy = r1 + rng.normal(0.0, 0.005, size=3)
+        r2_noisy = r2 + rng.normal(0.0, 0.005, size=3)
+        
+        # Refit and solve for goal crossing
+        v0_noisy = fit_launch_velocity(r1_noisy, r2_noisy, omega_nominal, 1.0, dt, 0.005)
+        impact = integrate_to_goal(v0_noisy, omega_nominal, 1.0)
+        
+        if impact is not None:
+            t_hit, hit_state = impact
+            trial_t.append(t_hit)
+            trial_y.append(hit_state[1])
+            trial_z.append(hit_state[2])
+
+    # Convert to arrays for statistical summary
+    mc_t = np.array(trial_t)
+    mc_y = np.array(trial_y)
+    mc_z = np.array(trial_z)
+
+    print(f"Successful Monte Carlo Runs: {len(mc_t)}/500")
+    print(f"Goal Hit Time -> Mean: {np.mean(mc_t):.4f}s, Std: {np.std(mc_t):.4f}s")
+    print(f"Goal Y Position -> Mean: {np.mean(mc_y):.4f}m, Std: {np.std(mc_y):.4f}m")
+    print(f"Goal Z Position -> Mean: {np.mean(mc_z):.4f}m, Std: {np.std(mc_z):.4f}m")
+    
+    # 95% Confidence Intervals (2 standard deviations roughly)
+    print(f"95% CI for Y: [{np.percentile(mc_y, 2.5):.4f}, {np.percentile(mc_y, 97.5):.4f}]")
+    print(f"95% CI for Z: [{np.percentile(mc_z, 2.5):.4f}, {np.percentile(mc_z, 97.5):.4f}]")
